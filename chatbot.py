@@ -49,11 +49,7 @@ def main():
     global counter
     st.title("IMPLEMENT OF CHATBOT USING NLP")
    
-    st.title(" Chatbot")
-    st.image("CHATBOT.jpg", width=200)
 
-    if "conversation" not in st.session_state:
-        st.session_state["conversation"] = []
     # Create a sidebar menu with options
     menu = ["Home", "Conversation History", "About",'Feedback']
     choice = st.sidebar.selectbox("Menu", menu)
