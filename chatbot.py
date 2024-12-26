@@ -48,7 +48,7 @@ counter = 0
 def main():
     global counter
     st.title("IMPLEMENT OF CHATBOT USING NLP")
-      st.set_page_config(page_title="IMPLEMENT OF CHATBOT USING NLP", page_icon="🤖", layout="wide")
+   
     st.title(" Chatbot")
     st.image("CHATBOT.jpg", width=200)
 
