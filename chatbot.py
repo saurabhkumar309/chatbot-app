@@ -48,9 +48,12 @@ counter = 0
 def main():
     global counter
     st.title("IMPLEMENT OF CHATBOT USING NLP")
+      st.set_page_config(page_title="IMPLEMENT OF CHATBOT USING NLP", page_icon="🤖", layout="wide")
+    st.title(" Chatbot")
+    st.image("CHATBOT.jpg", width=200)
 
     # Create a sidebar menu with options
-    menu = ["Home", "Conversation History", "About"]
+    menu = ["Home", "Conversation History", "About",'Feedback']
     choice = st.sidebar.selectbox("Menu", menu)
 
     # Home Menu
@@ -127,6 +130,24 @@ def main():
         st.subheader("Conclusion:")
 
         st.write("In this project, a chatbot is built that can understand and respond to user input based on intents. The chatbot was trained using NLP and Logistic Regression, and the interface was built using Streamlit. This project can be extended by adding more data, using more sophisticated NLP techniques, deep learning algorithms.")
+
+    elif choice == 'Feedback':
+        st.header("Feedback")
+        feedback = st.text_area("Please provide your feedback here:")
+
+        # Input fields for user email
+        user_email = st.text_input("Your Email Address:")
+        
+        if st.button("Submit Feedback"):
+            if feedback and user_email:
+                # Send the feedback via Gmail API using OAuth2 authentication
+                success = send_feedback_email(user_email, feedback)
+                if success:
+                    st.success("Thank you for your feedback! We will review it shortly.")
+                else:
+                    st.error("There was an error sending your feedback. Please try again.")
+            else:
+                st.error("Please fill in all the fields before submitting.")
 
 if __name__ == '__main__':
     main()
