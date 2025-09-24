@@ -1,4 +1,7 @@
 [
+    {"tag": "age", 
+    "patterns": ["What is your age?"],
+     "responses": ["I am a bot,I don't have an age."]},
     {
         "tag": "greeting",
         "patterns": [
@@ -73,7 +76,7 @@
         ]
     },
     {
-        "tag": "age",
+        "tag": "ages",
         "patterns": [
             "How old are you",
             "What's your age"

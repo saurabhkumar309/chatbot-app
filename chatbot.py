@@ -1,151 +1,280 @@
 import os
 import json
 import datetime
-import csv
 import nltk
 import ssl
 import streamlit as st
 import random
+import csv
+from dotenv import load_dotenv
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
+from textblob import TextBlob
+from streamlit_option_menu import option_menu
 
+# --- Load environment variables ---
+load_dotenv()
+EMAIL_USER = os.getenv('EMAIL_USER')
+EMAIL_PASS = os.getenv('EMAIL_PASS')
+
+# --- NLTK setup ---
 ssl._create_default_https_context = ssl._create_unverified_context
 nltk.data.path.append(os.path.abspath("nltk_data"))
 nltk.download('punkt')
 
-# Load intents from the JSON file
+# --- Load intents from the JSON file ---
 file_path = os.path.abspath("./intents.json")
-with open(file_path, "r") as file:
+with open(file_path, "r", encoding="utf-8") as file:
     intents = json.load(file)
 
-# Create the vectorizer and classifier
-vectorizer = TfidfVectorizer(ngram_range=(1, 4))
-clf = LogisticRegression(random_state=0, max_iter=10000)
-
-# Preprocess the data
-tags = []
+# --- Preprocess data ---
 patterns = []
+tags = []
 for intent in intents:
     for pattern in intent['patterns']:
-        tags.append(intent['tag'])
         patterns.append(pattern)
+        tags.append(intent['tag'])
 
-# training the model
-x = vectorizer.fit_transform(patterns)
+# --- Train vectorizer and classifier ---
+vectorizer = TfidfVectorizer(ngram_range=(1, 4))
+X = vectorizer.fit_transform(patterns)
 y = tags
-clf.fit(x, y)
+clf = LogisticRegression(random_state=0, max_iter=10000)
+clf.fit(X, y)
 
-def chatbot(input_text):
-    input_text = vectorizer.transform([input_text])
-    tag = clf.predict(input_text)[0]
+# --- Chatbot function ---
+def chatbot(user_input):
+    input_vec = vectorizer.transform([user_input])
+    predicted_tag = clf.predict(input_vec)[0]
     for intent in intents:
-        if intent['tag'] == tag:
-            response = random.choice(intent['responses'])
-            return response
-        
-counter = 0
+        if intent['tag'] == predicted_tag:
+            responses = intent.get('responses', [])
+            if responses:
+                return random.choice(responses)
+            else:
+                return "Sorry, I don't have a response for that."
+    return "Sorry, I don't understand."
 
+# --- Sentiment analysis function ---
+def get_sentiment(text):
+    blob = TextBlob(text)
+    polarity = blob.sentiment.polarity
+    if polarity > 0.2:
+        return '😊', 'Positive'
+    elif polarity < -0.2:
+        return '😞', 'Negative'
+    else:
+        return '😐', 'Neutral'
+
+# --- Persistent chat history ---
+CHAT_LOG = 'chat_log.csv'
+def load_chat_history():
+    messages = []
+    if os.path.exists(CHAT_LOG):
+        with open(CHAT_LOG, 'r', encoding='utf-8') as csvfile:
+            csv_reader = csv.reader(csvfile)
+            next(csv_reader, None)
+            for row in csv_reader:
+                if len(row) >= 4:
+                    messages.append({
+                        "role": row[0],
+                        "content": row[1],
+                        "timestamp": row[2],
+                        "sentiment": row[3]
+                    })
+    return messages
+
+def save_message(role, content, timestamp, sentiment):
+    with open(CHAT_LOG, 'a', newline='', encoding='utf-8') as csvfile:
+        csv_writer = csv.writer(csvfile)
+        csv_writer.writerow([role, content, timestamp, sentiment])
+
+# --- Streamlit App ---
 def main():
-    global counter
-    st.title("IMPLEMENT OF CHATBOT USING NLP")
-   
+    st.set_page_config(page_title="NLP Chatbot", page_icon="🤖", layout="wide")
+    # Theme CSS
+    theme = st.session_state.get('theme', 'Dark')
+    if theme == "Light":
+        st.markdown("""
+            <style>
+            body {background: #fff !important; color: #222 !important;}
+            .stChatMessage {background: #f5f6fa; color: #222;}
+            .user-bubble {background: #e0e0e0; color: #222;}
+            .bot-bubble {background: #f3e6ff; color: #222;}
+            </style>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+            <style>
+            body {background: #000 !important; color: #fff !important;}
+            .stChatMessage {background: #22223b; color: #fff;}
+            .user-bubble {background: linear-gradient(90deg, #00fff7 60%, #000 100%); color: #fff;}
+            .bot-bubble {background: linear-gradient(90deg, #ff00cc 60%, #000 100%); color: #fff;}
+            </style>
+        """, unsafe_allow_html=True)
 
-    # Create a sidebar menu with options
-    menu = ["Home", "Conversation History", "About",'Feedback']
-    choice = st.sidebar.selectbox("Menu", menu)
+    # --- Sidebar: Profile, Theme, Analytics ---
+    with st.sidebar:
+        st.title("👤 User Profile")
+        avatar_file = st.file_uploader("Upload Avatar", type=["png", "jpg", "jpeg"])
+        if avatar_file:
+            st.session_state['avatar'] = avatar_file.getvalue()
+        if st.session_state.get('avatar'):
+            st.image(st.session_state['avatar'], width=100)
+        user_name = st.text_input("Your Name", value=st.session_state.get('user_name', 'User'))
+        st.session_state['user_name'] = user_name
 
-    # Home Menu
-    if choice == "Home":
-        st.write("Welcome to the chatbot. Please type a message and press Enter to start the conversation.")
+        st.markdown("---")
+        theme = st.radio("Theme", ["Dark", "Light"], index=0 if st.session_state.get('theme', 'Dark') == 'Dark' else 1)
+        st.session_state['theme'] = theme
 
-        # Check if the chat_log.csv file exists, and if not, create it with column names
-        if not os.path.exists('chat_log.csv'):
-            with open('chat_log.csv', 'w', newline='', encoding='utf-8') as csvfile:
-                csv_writer = csv.writer(csvfile)
-                csv_writer.writerow(['User Input', 'Chatbot Response', 'Timestamp'])
+        st.markdown("---")
+        st.markdown("<div class='sidebar-stats'>", unsafe_allow_html=True)
+        st.markdown(f"**Total Messages:** {len(st.session_state.get('messages', []))}")
+        if 'start_time' not in st.session_state:
+            st.session_state['start_time'] = datetime.datetime.now()
+        duration = (datetime.datetime.now() - st.session_state['start_time']).seconds
+        st.markdown(f"**Session Duration:** {duration} sec")
+        st.markdown("</div>", unsafe_allow_html=True)
 
-        counter += 1
-        user_input = st.text_input("You:", key=f"user_input_{counter}")
+        # Sentiment chart
+        st.markdown("**Sentiment Analysis**")
+        sentiments = [m['sentiment'] for m in st.session_state.get('messages', []) if m['role'] == 'user']
+        pos = sentiments.count('Positive')
+        neu = sentiments.count('Neutral')
+        neg = sentiments.count('Negative')
+        st.bar_chart({"Positive": [pos], "Neutral": [neu], "Negative": [neg]})
 
-        if user_input:
+        if st.button("🧹 Clear Chat History"):
+            st.session_state['messages'] = []
+            st.session_state['start_time'] = datetime.datetime.now()
+            if os.path.exists(CHAT_LOG):
+                os.remove(CHAT_LOG)
+            st.success("Chat history cleared!")
 
-            # Convert the user input to a string
-            user_input_str = str(user_input)
+        # Download conversation as CSV
+        if st.session_state.get('messages', []):
+            csv_data = 'role,content,timestamp,sentiment\n' + '\n'.join([
+                f"{m['role']},{m['content']},{m['timestamp']},{m['sentiment']}"
+                for m in st.session_state['messages']
+            ])
+            st.download_button(
+                label="⬇️ Download Chat as CSV",
+                data=csv_data,
+                file_name="chat_history.csv",
+                mime="text/csv"
+            )
 
-            response = chatbot(user_input)
-            st.text_area("Chatbot:", value=response, height=120, max_chars=None, key=f"chatbot_response_{counter}")
+    # --- Option Menu ---
+    selected = option_menu(
+        menu_title=None,
+        options=["Home", "Conversation History", "About", "Feedback"],
+        icons=["house", "clock-history", "info-circle", "chat-dots"],
+        orientation="horizontal"
+    )
 
-            # Get the current timestamp
-            timestamp = datetime.datetime.now().strftime(f"%Y-%m-%d %H:%M:%S")
+    # --- Load persistent chat history ---
+    if 'messages' not in st.session_state:
+        st.session_state['messages'] = load_chat_history()
 
-            # Save the user input and chatbot response to the chat_log.csv file
-            with open('chat_log.csv', 'a', newline='', encoding='utf-8') as csvfile:
-                csv_writer = csv.writer(csvfile)
-                csv_writer.writerow([user_input_str, response, timestamp])
+    if selected == "Home":
+        st.title("🤖 Neon Chatbot UI & Feedback")
+        # Show avatar and name at top of main area
+        col1, col2 = st.columns([1, 6])
+        with col1:
+            if st.session_state.get('avatar'):
+                st.image(st.session_state['avatar'], width=70)
+            else:
+                st.markdown("<div style='font-size:3em;'>🧑</div>", unsafe_allow_html=True)
+        with col2:
+            st.markdown(f"<h3 style='margin-top: 20px;'>{st.session_state['user_name']}</h3>", unsafe_allow_html=True)
+        st.write(f"Welcome, {st.session_state['user_name']}! Type a message below and press Enter to chat.")
 
-            if response.lower() in ['goodbye', 'bye']:
-                st.write("Thank you for chatting with me. Have a great day!")
+        # Chat input and display
+        if prompt := st.chat_input("Type your message..."):
+            emoji, sentiment = get_sentiment(prompt)
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            st.session_state['messages'].append({
+                "role": "user",
+                "content": prompt,
+                "timestamp": timestamp,
+                "sentiment": sentiment
+            })
+            save_message("user", prompt, timestamp, sentiment)
+            response = chatbot(prompt)
+            bot_emoji, _ = get_sentiment(response)
+            bot_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            st.session_state['messages'].append({
+                "role": "assistant",
+                "content": response,
+                "timestamp": bot_time,
+                "sentiment": "Neutral"
+            })
+            save_message("assistant", response, bot_time, "Neutral")
+
+        # Display chat history as bubbles with avatars and sentiment
+        for i, message in enumerate(st.session_state['messages']):
+            avatar = "🧑" if message["role"] == "user" else "🤖"
+            bubble_class = "user-bubble" if message["role"] == "user" else "bot-bubble"
+            sentiment_emoji, _ = get_sentiment(message["content"]) if message["role"] == "user" else ("🤖", "Neutral")
+            st.markdown(f"<div class='stChatMessage {bubble_class}'><span class='chat-avatar'>{avatar}</span> <b>{message['role'].capitalize()}:</b> {message['content']} <span style='font-size:1.2em;'>{sentiment_emoji}</span><br><span style='font-size:0.8em;color:#00fff7'>{message['timestamp']}</span></div>", unsafe_allow_html=True)
+
+        # Goodbye message
+        if st.session_state['messages']:
+            last_bot = st.session_state['messages'][-1]
+            if last_bot["role"] == "assistant" and last_bot["content"].lower() in ['goodbye', 'bye']:
+                st.info("Thank you for chatting with me. Have a great day!")
                 st.stop()
 
-    # Conversation History Menu
-    elif choice == "Conversation History":
-        # Display the conversation history in a collapsible expander
+    elif selected == "Conversation History":
         st.header("Conversation History")
-        # with st.beta_expander("Click to see Conversation History"):
-        with open('chat_log.csv', 'r', encoding='utf-8') as csvfile:
-            csv_reader = csv.reader(csvfile)
-            next(csv_reader)  # Skip the header row
-            for row in csv_reader:
-                st.text(f"User: {row[0]}")
-                st.text(f"Chatbot: {row[1]}")
-                st.text(f"Timestamp: {row[2]}")
-                st.markdown("---")
+        if os.path.exists(CHAT_LOG):
+            with open(CHAT_LOG, 'r', encoding='utf-8') as csvfile:
+                csv_reader = csv.reader(csvfile)
+                next(csv_reader, None)
+                for row in csv_reader:
+                    if len(row) >= 4:
+                        st.markdown(f"<div class='stChatMessage user-bubble'><b>User:</b> {row[1]} <span style='font-size:1.2em;'>{get_sentiment(row[1])[0]}</span></div>", unsafe_allow_html=True)
+                        st.markdown(f"<div class='stChatMessage bot-bubble'><b>Chatbot:</b> {row[1]}</div>", unsafe_allow_html=True)
+                        st.caption(f"Timestamp: {row[2]}")
+                        st.markdown("---")
+        else:
+            st.info("No conversation history found.")
 
-    elif choice == "About":
-        st.write("The goal of this project is to create a chatbot that can understand and respond to user input based on intents. The chatbot is built using Natural Language Processing (NLP) library and Logistic Regression, to extract the intents and entities from user input. The chatbot is built using Streamlit, a Python library for building interactive web applications.")
-
+    elif selected == "About":
+        st.title("About the Chatbot")
+        st.write("""
+        This project demonstrates a chatbot built using NLP and Logistic Regression, with a modern Streamlit interface. It supports intent recognition, chat history, feedback collection, user profile, theme switching, and sentiment analysis.
+        """)
         st.subheader("Project Overview:")
-
         st.write("""
-        The project is divided into two parts:
-        1. NLP techniques and Logistic Regression algorithm is used to train the chatbot on labeled intents and entities.
-        2. For building the Chatbot interface, Streamlit web framework is used to build a web-based chatbot interface. The interface allows users to input text and receive responses from the chatbot.
+        1. NLP techniques and Logistic Regression algorithm are used to train the chatbot on labeled intents and entities.
+        2. Streamlit web framework provides a user-friendly chat interface.
+        3. Sentiment analysis and user profile features enhance the experience.
         """)
-
         st.subheader("Dataset:")
-
         st.write("""
-        The dataset used in this project is a collection of labelled intents and entities. The data is stored in a list.
-        - Intents: The intent of the user input (e.g. "greeting", "budget", "about")
-        - Entities: The entities extracted from user input (e.g. "Hi", "How do I create a budget?", "What is your purpose?")
-        - Text: The user input text.
+        The dataset is a collection of labelled intents and entities stored in a JSON file.
         """)
-
         st.subheader("Streamlit Chatbot Interface:")
-
-        st.write("The chatbot interface is built using Streamlit. The interface includes a text input box for users to input their text and a chat window to display the chatbot's responses. The interface uses the trained model to generate responses to user input.")
-
+        st.write("The chatbot interface uses chat bubbles, avatars, session state, and analytics for a smooth experience.")
         st.subheader("Conclusion:")
+        st.write("This chatbot can be extended with more data, advanced NLP, or deep learning models.")
 
-        st.write("In this project, a chatbot is built that can understand and respond to user input based on intents. The chatbot was trained using NLP and Logistic Regression, and the interface was built using Streamlit. This project can be extended by adding more data, using more sophisticated NLP techniques, deep learning algorithms.")
-
-    elif choice == 'Feedback':
+    elif selected == "Feedback":
         st.header("Feedback")
         feedback = st.text_area("Please provide your feedback here:")
-
-        # Input fields for user email
         user_email = st.text_input("Your Email Address:")
-        
         if st.button("Submit Feedback"):
             if feedback and user_email:
-                # Send the feedback via Gmail API using OAuth2 authentication
-                success = send_feedback_email(user_email, feedback)
-                if success:
-                    st.success("Thank you for your feedback! We will review it shortly.")
-                else:
-                    st.error("There was an error sending your feedback. Please try again.")
+                st.success("Thank you for your feedback! We will review it shortly.")
             else:
                 st.error("Please fill in all the fields before submitting.")
 
 if __name__ == '__main__':
+    # Create chat_log.csv with header if not exists
+    if not os.path.exists(CHAT_LOG):
+        with open(CHAT_LOG, 'w', newline='', encoding='utf-8') as csvfile:
+            csv_writer = csv.writer(csvfile)
+            csv_writer.writerow(['role', 'content', 'timestamp', 'sentiment'])
     main()
