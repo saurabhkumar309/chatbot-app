@@ -1,4 +1,6 @@
-nltk
 streamlit
 scikit-learn
-
+nltk
+python-dotenv
+textblob
+streamlit-option-menu
