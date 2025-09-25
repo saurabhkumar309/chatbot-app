@@ -284,7 +284,7 @@ If you encounter any issues or have questions:
 AI Chatbot Pro is designed to demonstrate modern chatbot development techniques using Python and Streamlit. It combines machine learning, web development, and user experience design to create an engaging conversational AI.
 
 - Version: 2.0 Pro
-- Author: Your Name
+- Author: SAURABH KUMAR
 - Last Updated: September 2025
 
 ⭐ If you find this project helpful, please give it a star! ⭐
