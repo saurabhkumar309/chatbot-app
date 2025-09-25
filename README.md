@@ -1,6 +1,11 @@
-# 🤖 AI Chatbot Pro - Enhanced Streamlit Chatbot
+# 🤖 Intelligent Chatbot Application
 
-An advanced conversational AI chatbot built with Streamlit, featuring modern UI, image upload capabilities, analytics dashboard, and enhanced user experience.
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![TensorFlow](https://img.shields.io/badge/TensorFlow-2.0+-orange.svg)](https://tensorflow.org/)
+[![Flask](https://img.shields.io/badge/Flask-2.0+-green.svg)](https://flask.palletsprojects.com/)
+[![Status](https://img.shields.io/badge/Status-Live-brightgreen.svg)](https://chatbot-app-9y5f3djomdsjgyzqee8guw.streamlit.app)
+
+> An advanced conversational AI chatbot built with natural language processing capabilities, featuring intent recognition and contextual responses.
 
 ## ✨ Features
 
